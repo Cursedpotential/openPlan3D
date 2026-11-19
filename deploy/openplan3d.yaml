@@ -1,0 +1,58 @@
+# =============================================================================
+# OPENPLAN3D - fork of laanlabs/openPlan3D (SvelteKit, adapter-node), one service, tailnet only.
+# NOT BUILT OR DEPLOYED. Stage D of docs/FORK-PLAN.md: files only.
+# Meant as a Coolify "Docker Compose" app, compose file deploy/openplan3d.yaml,
+# build context = repo root (the Dockerfile is deploy/Dockerfile).
+#
+# Coolify env to set (names only here, values live in Coolify, never in git): see deploy/.env.example.
+# Tailnet-only: the port is published on BIND_IP (a tailnet address) and there are no Traefik/public router labels.
+# Firebase features (handoff uploads, assistant shares) stay off: those flags are not passed through.
+# Storage: host bind mount, mirrored project JSON under /data/mirror.
+# Memory cap only, no CPU cap (house style: a CPU quota shrinks available_parallelism).
+# =============================================================================
+
+services:
+  openplan3d:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: openplan3d
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOST: 0.0.0.0
+      # Same limit as upstream apphosting.yaml (68M covers the 64 MiB assistant-share ceiling).
+      BODY_SIZE_LIMIT: "68M"
+      # adapter-node builds absolute URLs and checks POST origins against this; set it to the tailnet URL.
+      ORIGIN: ${ORIGIN:?set ORIGIN in Coolify env}
+      # Do not load the Firebase SDK in the browser.
+      PUBLIC_ENABLE_ANALYTICS: "false"
+      # Upstream Firebase features stay off: HANDOFF_UPLOADS_ENABLED / ASSISTANT_SHARES_ENABLED / HANDOFF_BUCKET unset.
+      # Agent bridge + folder mirror (today's server-side store).
+      OPENPLAN3D_AGENT_BRIDGE: ${OPENPLAN3D_AGENT_BRIDGE:-}
+      OPENPLAN3D_MIRROR_DIR: /data/mirror
+      # SurrealDB store and remote MCP route: read by stages A and B, unused by the upstream code today.
+      SURREAL_URL: ${SURREAL_URL:-}
+      SURREAL_NAMESPACE: ${SURREAL_NAMESPACE:-}
+      SURREAL_DATABASE: ${SURREAL_DATABASE:-}
+      SURREAL_USER: ${SURREAL_USER:-}
+      SURREAL_PASS: ${SURREAL_PASS:-}
+      MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN:-}
+    mem_limit: 1g
+    ports:
+      - "${BIND_IP:?set BIND_IP in Coolify env (tailnet address)}:${HOST_PORT:-8480}:3000"
+    volumes:
+      # The container runs as uid 1000 (node); the host directory must be writable by it.
+      - /data/openplan3d/mirror:/data/mirror
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - openplan3d
+
+networks:
+  openplan3d:

@@ -1,0 +1,17 @@
+node_modules
+.svelte-kit
+build
+.output
+.git
+.claude
+.cnf
+.env
+.env.*
+!.env.example
+playwright-report
+test-results
+benchmark-results
+firebase-debug.log
+# repo-root screenshots only; static/ and src/ images are kept
+/*.jpg
+/*.png
